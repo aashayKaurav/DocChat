@@ -1,0 +1,7 @@
+.env
+.vs/
+**/bin/
+**/obj/
+**/storage/
+*.user
+.test.txt

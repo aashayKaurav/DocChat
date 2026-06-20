@@ -13,22 +13,25 @@ namespace DocChat.Infrastructure.AI;
 
 public class OpenAiLlmService : ILlmService
 {
-    private readonly ChatClient _client;
+    private readonly ChatClient? _client;
     private readonly ILogger<OpenAiLlmService> _logger;
 
     public OpenAiLlmService(IConfiguration configuration, ILogger<OpenAiLlmService> logger)
     {
         _logger = logger;
-        var apiKey = configuration["OpenAI:ApiKey"]
-            ?? Environment.GetEnvironmentVariable("OPENAI_API_KEY")
-            ?? throw new InvalidOperationException("OpenAI API key not configured");
+        var apiKey = configuration["OpenAI:ApiKey"];
+        if (string.IsNullOrEmpty(apiKey))
+            apiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
 
         var model = configuration["OpenAI:ChatModel"] ?? "gpt-4o-mini";
-        _client = new ChatClient(model, new ApiKeyCredential(apiKey));
+        if (!string.IsNullOrEmpty(apiKey))
+            _client = new ChatClient(model, new ApiKeyCredential(apiKey));
     }
 
     public async Task<string> GenerateResponseAsync(string prompt, CancellationToken cancellationToken = default)
     {
+        if (_client == null) throw new InvalidOperationException("OpenAI API key not configured. Set OPENAI_API_KEY environment variable.");
+
         var messages = new List<ChatMessage>
         {
             new SystemChatMessage("You are a helpful assistant that answers questions based on the provided document context. Only answer based on the context given. If the context doesn't contain the answer, say so."),
@@ -43,6 +46,8 @@ public class OpenAiLlmService : ILlmService
 
     public async IAsyncEnumerable<string> StreamResponseAsync(string prompt, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
+        if (_client == null) throw new InvalidOperationException("OpenAI API key not configured. Set OPENAI_API_KEY environment variable.");
+
         var messages = new List<ChatMessage>
         {
             new SystemChatMessage("You are a helpful assistant that answers questions based on the provided document context. Only answer based on the context given. If the context doesn't contain the answer, say so."),

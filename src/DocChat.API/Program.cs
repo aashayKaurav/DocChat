@@ -1,6 +1,7 @@
 using DocChat.Application;
 using DocChat.Infrastructure;
 using DocChat.API.Endpoints;
+using DocChat.API.Hubs;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -21,6 +22,8 @@ builder.Services.AddCors(options =>
 });
 builder.Services.AddAntiforgery();
 
+builder.Services.AddSignalR();
+
 var app = builder.Build();
 
 app.UseCors();
@@ -30,5 +33,9 @@ app.UseAntiforgery();
 app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));
 
 app.MapDocumentEndpoints();
+
+app.MapChatEndpoints();
+
+app.MapHub<ChatHub>("/hubs/chat");
 
 app.Run();

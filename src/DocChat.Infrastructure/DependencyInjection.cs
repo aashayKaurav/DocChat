@@ -1,4 +1,5 @@
 ﻿using DocChat.Application.Common.Interfaces;
+using DocChat.Infrastructure.AI;
 using DocChat.Infrastructure.Embeddings;
 using DocChat.Infrastructure.FileStorage;
 using DocChat.Infrastructure.Kafka;
@@ -19,9 +20,11 @@ public static class DependencyInjection
             options.UseNpgsql(configuration.GetConnectionString("DefaultConnection")));
 
         services.AddScoped<IDocumentRepository, DocumentRepository>();
+        services.AddScoped<IConversationRepository, ConversationRepository>();
         services.AddSingleton<IFileStorage, LocalFileStorage>();
         services.AddSingleton<IEventProducer, KafkaProducer>();
         services.AddSingleton<IEmbeddingService, OpenAiEmbeddingService>();
+        services.AddSingleton<ILlmService, OpenAiLlmService>();
 
         services.AddHttpClient<IVectorStore, QdrantVectorStore>(client =>
         {

@@ -46,4 +46,12 @@ public class DocumentRepository : IDocumentRepository
             await _dbContext.SaveChangesAsync(cancellationToken);
         }
     }
+
+    public async Task<List<DocumentChunk>> GetChunksByDocumentIdAsync(Guid documentId, CancellationToken cancellationToken = default)
+    {
+        return await _dbContext.DocumentChunks
+            .Where(c => c.DocumentId == documentId)
+            .OrderBy(c => c.ChunkIndex)
+            .ToListAsync(cancellationToken);
+    }
 }

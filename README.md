@@ -3,23 +3,52 @@
   A full-stack RAG (Retrieval-Augmented Generation) application that lets you upload documents and ask questions about them. Answers
   are generated from your actual documents with source citations — no hallucination.
 
-  ![Architecture](https://excalidraw.com/#json=dgCLFwkWgIEuqV1v7Gf8k,WR_PkfM1X2-VySyPBkQ5eA)
+  ![Architecture](docs/architecture.png)
 
   ## Architecture
 
-  [React + TypeScript]  <--SignalR-->  [.NET Minimal API]
-          |                                   |
-     Chat UI                       +----------+---------+
-     Doc Upload                    |          |         |
-     Streaming               [Kafka]   [PostgreSQL]  [Local FS]
-                                 |          |
-                          [.NET Consumer]   |
-                            |         |     |
-                      [Embeddings] [Chunking]|
-                            |               |
-                        [Qdrant]            |
-                            |               |
-                      [Ollama / OpenAI]------+
+  ```
+  ┌──────────────┐       REST / WebSocket        ┌─────────────────────┐
+  │              │  ◄──────────────────────────►  │                     │
+  │   React 18   │                                │   .NET Minimal API  │
+  │  TypeScript  │    SignalR (streaming tokens)   │   SignalR Hub       │
+  │  Tailwind    │  ◄──────────────────────────►  │   MediatR (CQRS)    │
+  │  Vite        │                                │   Clean Architecture│
+  │              │                                │                     │
+  └──────────────┘                                └──────┬──────┬───────┘
+     :5173                                               │      │
+                                                         │      │  Publish
+                                                Read/    │      │  Event
+                                                Write    │      ▼
+                                                         │   ┌──────────────┐
+                                                         │   │ Apache Kafka │
+                                                         │   │ (KRaft mode) │
+                                                         │   └──────┬───────┘
+                                                         │          │ Consume
+                                                         │          ▼
+                                                         │   ┌──────────────┐
+                                                         │   │   Consumer   │
+                                                         │   │   Worker     │
+                                                         │   │  ┌────────┐  │
+                                                         │   │  │PDF Parse│  │
+                                                         │   │  │Chunking │  │
+                                                         │   │  └────────┘  │
+                                                         │   └──────┬───────┘
+                                                         │          │
+                                ┌─────────────────┬──────┴──────────┤
+                                ▼                 ▼                 ▼
+                         ┌────────────┐   ┌─────────────┐   ┌────────────┐
+                         │ PostgreSQL │   │   Qdrant     │   │   Ollama   │
+                         │            │   │ Vector DB    │   │ Llama 3.1  │
+                         │ Docs,Chats │   │ Embeddings   │   │ Embeddings │
+                         │ Chunks     │   │ Search       │   │ Chat/Stream│
+                         └────────────┘   └─────────────┘   └────────────┘
+                            :5434             :6333             :11434
+
+                ┌──────────────────────────────────────────────────────┐
+                │        Docker Compose — One command startup          │
+                └──────────────────────────────────────────────────────┘
+  ```
 
   ## Tech Stack
 
@@ -48,16 +77,83 @@
 
   ## Project Structure
 
+  ```
   DocChat/
-  ├── docker-compose.yml              # PostgreSQL, Kafka, Qdrant, Ollama
+  ├── docker-compose.yml                  # PostgreSQL, Kafka, Qdrant, Ollama
+  ├── nuget.config                        # NuGet package source config
+  │
   ├── src/
-  │   ├── DocChat.Domain/             # Entities (Document, Chunk, Conversation, ChatMessage)
-  │   ├── DocChat.Application/        # CQRS commands/queries, interfaces
-  │   ├── DocChat.Infrastructure/     # EF Core, Kafka, Qdrant, Ollama, file storage
-  │   ├── DocChat.API/                # Minimal API endpoints, SignalR ChatHub
-  │   └── DocChat.Consumer/           # Kafka consumer, PDF parsing, text chunking
-  ├── client/                         # React + TypeScript + Tailwind + Vite
+  │   ├── DocChat.Domain/                 
+  │   │   ├── Entities/
+  │   │   │   ├── Document.cs
+  │   │   │   ├── DocumentChunk.cs
+  │   │   │   ├── Conversation.cs
+  │   │   │   └── ChatMessage.cs
+  │   │   └── Enums/
+  │   │       └── DocumentStatus.cs
+  │   │
+  │   ├── DocChat.Application/            
+  │   │   ├── Chat/Commands/
+  │   │   ├── Documents/Commands/
+  │   │   └── Common/Interfaces/
+  │   │       ├── IDocumentRepository.cs
+  │   │       ├── IConversationRepository.cs
+  │   │       ├── ILlmService.cs
+  │   │       ├── IEmbeddingService.cs
+  │   │       ├── IVectorStore.cs
+  │   │       ├── IFileStorage.cs
+  │   │       └── IEventProducer.cs
+  │   │
+  │   ├── DocChat.Infrastructure/         
+  │   │   ├── AI/
+  │   │   │   ├── OllamaLlmService.cs
+  │   │   │   └── OpenAiLlmService.cs
+  │   │   ├── Embeddings/
+  │   │   │   ├── OllamaEmbeddingService.cs
+  │   │   │   └── OpenAiEmbeddingService.cs
+  │   │   ├── VectorStore/
+  │   │   │   └── QdrantVectorStore.cs
+  │   │   ├── Kafka/
+  │   │   │   └── KafkaProducer.cs
+  │   │   ├── FileStorage/
+  │   │   │   └── LocalFileStorage.cs
+  │   │   └── Persistence/
+  │   │       ├── AppDbContext.cs
+  │   │       ├── Migrations/
+  │   │       └── Repositories/
+  │   │
+  │   ├── DocChat.API/                    # Minimal API endpoints, SignalR hub
+  │   │   ├── Endpoints/
+  │   │   │   ├── DocumentEndpoints.cs
+  │   │   │   └── ChatEndpoints.cs
+  │   │   ├── Hubs/
+  │   │   │   └── ChatHub.cs
+  │   │   └── Program.cs
+  │   │
+  │   └── DocChat.Consumer/              # Kafka consumer worker
+  │       ├── Workers/
+  │       │   └── DocumentProcessingWorker.cs
+  │       ├── Services/
+  │       │   ├── PdfParserService.cs
+  │       │   └── TextChunkerService.cs
+  │       └── Program.cs
+  │
+  ├── client/                            # React frontend
+  │   ├── src/
+  │   │   ├── App.tsx
+  │   │   ├── api/apiClient.ts
+  │   │   ├── hooks/useSignalR.ts
+  │   │   ├── types/index.ts
+  │   │   └── components/
+  │   │       ├── Chat/
+  │   │       ├── Documents/
+  │   │       ├── Sidebar/
+  │   │       └── Layout/
+  │   ├── vite.config.ts
+  │   └── package.json
+  │
   └── README.md
+  ```
 
   ## Prerequisites
 

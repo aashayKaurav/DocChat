@@ -23,8 +23,18 @@ public static class DependencyInjection
         services.AddScoped<IConversationRepository, ConversationRepository>();
         services.AddSingleton<IFileStorage, LocalFileStorage>();
         services.AddSingleton<IEventProducer, KafkaProducer>();
-        services.AddSingleton<IEmbeddingService, OpenAiEmbeddingService>();
-        services.AddSingleton<ILlmService, OpenAiLlmService>();
+
+        // Ollama services (free, local)
+        services.AddHttpClient<IEmbeddingService, OllamaEmbeddingService>(client =>
+        {
+            client.BaseAddress = new Uri(configuration["Ollama:Host"] ?? "http://localhost:11434");
+        });
+
+        services.AddHttpClient<ILlmService, OllamaLlmService>(client =>
+        {
+            client.BaseAddress = new Uri(configuration["Ollama:Host"] ?? "http://localhost:11434");
+            client.Timeout = TimeSpan.FromMinutes(5);
+        });
 
         services.AddHttpClient<IVectorStore, QdrantVectorStore>(client =>
         {

@@ -16,7 +16,8 @@ public class QdrantVectorStore : IVectorStore
     private readonly HttpClient _httpClient;
     private readonly string _collectionName;
     private readonly ILogger<QdrantVectorStore> _logger;
-    private const int VectorSize = 1536; // text-embedding-3-small dimensions
+    //private const int VectorSize = 1536; // text-embedding-3-small dimensions
+    private const int VectorSize = 768;
 
     public QdrantVectorStore(HttpClient httpClient, IConfiguration configuration, ILogger<QdrantVectorStore> logger)
     {
